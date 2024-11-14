@@ -82,7 +82,13 @@ def ask_anthropic(question: str) -> tuple[bool, str | None]:
 
 
 def main():
-    question = input("Ask your question: ")
+    while True:
+        question = input("Ask your question: ").strip()
+
+        if question:
+            break
+        print("Hum ... did you mean to write something?")
+
     answer_question_pairs = load_answer_question_pair_data()
 
     # Check if the question is already archived
