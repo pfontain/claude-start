@@ -89,20 +89,19 @@ def main():
     if question in answer_question_pairs:
         print('I think I remember ...')
         print(answer_question_pairs[question])
-        return
-
-    # Ask the question using Anthropics API
-    success, response = ask_anthropic(question)
-
-    if success:
-        print(response)
-        # Archive the answer and save the data
-        if archive_answer_question_pair(question, response, answer_question_pairs):
-            save_answer_question_pair_data(answer_question_pairs)
-        else:
-            logger.warning(f'Unable to archive answer to "{question}"')
     else:
-        print('''I'm sorry, I can't answer your question right now''')
+        # Ask the question using Anthropics API
+        success, response = ask_anthropic(question)
+
+        if success:
+            print(response)
+            # Archive the answer and save the data
+            if archive_answer_question_pair(question, response, answer_question_pairs):
+                save_answer_question_pair_data(answer_question_pairs)
+            else:
+                logger.warning(f'Unable to archive answer to "{question}"')
+        else:
+            print('''I'm sorry, I can't answer your question right now''')
 
 
 if __name__ == "__main__":
