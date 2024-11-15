@@ -31,7 +31,7 @@ def load_answer_question_pair_data() -> dict:
             with ANSWER_QUESTION_PAIR_DATA_JSON_PATH.open("r") as file:
                 return json.load(file)
         except (json.JSONDecodeError, OSError) as e:
-            logger.error(f"Error loading data: {e}")
+            logger.error(f"Error loading data from '{ANSWER_QUESTION_PAIR_DATA_JSON_PATH}': {e}")
             return {}
     return {}
 
@@ -49,7 +49,7 @@ def save_answer_question_pair_data(answer_question_pairs: dict) -> bool:
             json.dump(answer_question_pairs, file, indent=4)
         return True
     except OSError as e:
-        logger.error(f"Error saving data: {e}")
+        logger.error(f"Error saving data in file '{ANSWER_QUESTION_PAIR_DATA_JSON_PATH}': {e}")
         return False
 
 
@@ -77,7 +77,7 @@ def ask_anthropic(question: str) -> tuple[bool, str | None]:
         )
         return True, response.content[0].text  # Return True and the answer
     except Exception as e:
-        logger.error(f"Error querying Anthropics: {e}")
+        logger.error(f"Error querying Anthropics for question '{question}': {e}")
         return False, None
 
 
@@ -93,7 +93,7 @@ def main():
 
     # Check if the question is already archived
     if question in answer_question_pairs:
-        print('I think I remember ...')
+        print("I think I remember ...")
         print(answer_question_pairs[question])
     else:
         # Ask the question using Anthropics API
@@ -105,7 +105,7 @@ def main():
             if archive_answer_question_pair(question, response, answer_question_pairs):
                 save_answer_question_pair_data(answer_question_pairs)
             else:
-                logger.warning(f'Unable to archive answer to "{question}"')
+                logger.warning(f"Unable to archive answer to '{question}'")
         else:
             print('''I'm sorry, I can't answer your question right now''')
 
