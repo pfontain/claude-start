@@ -59,6 +59,32 @@ def save_answer_question_pair_data(answer_question_pairs: dict) -> bool:
         logger.error(f"Error saving data in file '{ANSWER_QUESTION_PAIR_DATA_JSON_PATH}': {e}")
         return False
 
+def create_anthropic_request_arguments(question: str) -> dict:
+    return {
+        "model": "claude-3-5-sonnet-20240620",
+        "system": "You are a world-class poet. Respond only with short poems.",
+        "messages": [
+            {
+                "role": "user",
+                "content": question
+            }
+        ]
+    }
+
+def log_anthropic_cost(question: str):
+    global logger
+    client = anthropic.Anthropic()
+
+    request_arguments = create_anthropic_request_arguments(question)
+    response = client.beta.messages.count_tokens(
+        betas=["token-counting-2024-11-01"],
+        model=request_arguments["model"],
+        system=request_arguments["system"],
+        messages=request_arguments["messages"]
+    )
+
+    logger.info(response.model_dump_json())
+
 
 def ask_anthropic(question: str) -> tuple[bool, str | None]:
     """
@@ -70,18 +96,14 @@ def ask_anthropic(question: str) -> tuple[bool, str | None]:
     """
     global logger
     try:
+        request_arguments = create_anthropic_request_arguments(question)
         client = anthropic.Anthropic()
         response = client.messages.create(
-            model="claude-3-5-sonnet-20240620",
+            model=request_arguments["model"],
             max_tokens=1000,
             temperature=0,
-            system="You are a world-class poet. Respond only with short poems.",
-            messages=[
-                {
-                    "role": "user",
-                    "content": question
-                }
-            ]
+            system=request_arguments["system"],
+            messages=request_arguments["messages"]
         )
         return True, response.content[0].text  # Return True and the answer
     except Exception as e:
@@ -117,6 +139,7 @@ def main():
         print("I think I remember ...")
         print(answer_question_pairs[question])
     else:
+        log_anthropic_cost(question)
         # Ask the question using Anthropics API
         success, response = ask_anthropic(question)
 
