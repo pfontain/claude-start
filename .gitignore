@@ -4,6 +4,10 @@ answer_question_pair_data.json
 # Generated cost data
 cost_data.json
 
+# Black code formatter configuration is in vscode/settings.json
+.vscode/*
+!.vscode/settings.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

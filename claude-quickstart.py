@@ -20,23 +20,29 @@ CLAUDE_3_5_SONNET_PRICE_DOLLARS_INPUT_PER_MILLION_OF_TOKENS = 3
 # Claude 3.5 Sonnet price in dollars for a million output tokens
 CLAUDE_3_5_SONNET_PRICE_DOLLARS_OUTPUT_PER_MILLION_OF_TOKENS = 15
 
+
 def setup_logger(enable_streaming_logging: bool) -> logging.Logger:
     """Configure and return a logger, or None if logging is disabled."""
-    logger = logging.getLogger('poet_logger')
+    logger = logging.getLogger("poet_logger")
     logger.setLevel(logging.DEBUG)  # Set the overall logger level
 
     if enable_streaming_logging:
         stream_handler = logging.StreamHandler()
         stream_handler.setLevel(logging.INFO)
-        stream_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+        stream_handler.setFormatter(
+            logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        )
         logger.addHandler(stream_handler)
 
-    file_handler = logging.FileHandler('app.log', encoding='utf-8')
+    file_handler = logging.FileHandler("app.log", encoding="utf-8")
     file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    )
     logger.addHandler(file_handler)
 
     return logger
+
 
 def load_answer_question_pair_data() -> dict:
     """Load question-answer pairs from a JSON file if it exists."""
@@ -46,12 +52,16 @@ def load_answer_question_pair_data() -> dict:
             with ANSWER_QUESTION_PAIR_DATA_JSON_PATH.open("r") as file:
                 return json.load(file)
         except (json.JSONDecodeError, OSError) as e:
-            logger.error(f"Error loading data from '{ANSWER_QUESTION_PAIR_DATA_JSON_PATH}': {e}")
+            logger.error(
+                f"Error loading data from '{ANSWER_QUESTION_PAIR_DATA_JSON_PATH}': {e}"
+            )
             return {}
     return {}
 
 
-def archive_answer_question_pair(question: str, answer: str, answer_question_pairs: dict) -> bool:
+def archive_answer_question_pair(
+    question: str, answer: str, answer_question_pairs: dict
+) -> bool:
     """Archive a new question-answer pair into the dictionary."""
     answer_question_pairs[question] = answer
     return True
@@ -65,20 +75,19 @@ def save_answer_question_pair_data(answer_question_pairs: dict) -> bool:
             json.dump(answer_question_pairs, file, indent=4)
         return True
     except OSError as e:
-        logger.error(f"Error saving data in file '{ANSWER_QUESTION_PAIR_DATA_JSON_PATH}': {e}")
+        logger.error(
+            f"Error saving data in file '{ANSWER_QUESTION_PAIR_DATA_JSON_PATH}': {e}"
+        )
         return False
+
 
 def create_anthropic_request_arguments(question: str) -> dict:
     return {
         "model": "claude-3-5-sonnet-20240620",
         "system": "You are a world-class poet. Respond only with short poems.",
-        "messages": [
-            {
-                "role": "user",
-                "content": question
-            }
-        ]
+        "messages": [{"role": "user", "content": question}],
     }
+
 
 # TODO: Validate data
 def load_cost_data() -> dict:
@@ -93,6 +102,7 @@ def load_cost_data() -> dict:
             return {}
     return {}
 
+
 def save_cost_data(cost_data: dict) -> bool:
     """Save the cost data to the JSON file."""
     global logger
@@ -104,11 +114,22 @@ def save_cost_data(cost_data: dict) -> bool:
         logger.error(f"Error saving data in file '{COST_DATA_JSON_PATH}': {e}")
         return False
 
+
 def get_anthropic_input_tokens_cost(input_tokens_count: int) -> float:
-    return input_tokens_count * CLAUDE_3_5_SONNET_PRICE_DOLLARS_INPUT_PER_MILLION_OF_TOKENS / 1_000_000
+    return (
+        input_tokens_count
+        * CLAUDE_3_5_SONNET_PRICE_DOLLARS_INPUT_PER_MILLION_OF_TOKENS
+        / 1_000_000
+    )
+
 
 def get_anthropic_output_tokens_cost(output_tokens_count: float) -> float:
-    return output_tokens_count * CLAUDE_3_5_SONNET_PRICE_DOLLARS_OUTPUT_PER_MILLION_OF_TOKENS / 1_000_000
+    return (
+        output_tokens_count
+        * CLAUDE_3_5_SONNET_PRICE_DOLLARS_OUTPUT_PER_MILLION_OF_TOKENS
+        / 1_000_000
+    )
+
 
 def log_anthropic_cost(question: str, output_tokens_average: float | None):
     global logger
@@ -119,7 +140,7 @@ def log_anthropic_cost(question: str, output_tokens_average: float | None):
         betas=["token-counting-2024-11-01"],
         model=request_arguments["model"],
         system=request_arguments["system"],
-        messages=request_arguments["messages"]
+        messages=request_arguments["messages"],
     )
 
     logger.debug(f"input tokens count: {response.input_tokens}")
@@ -142,10 +163,11 @@ def log_anthropic_cost(question: str, output_tokens_average: float | None):
 
     return estimated_total_cost
 
+
 def ask_anthropic(question: str) -> tuple[bool, str, int | None]:
     """
     Ask a question to the Anthropics model and return a tuple (success_flag, response, output_tokens_count).
-    
+
     Returns:
         - (True, answer, output_tokens_count) if the query was successful.
         - None if there was an issue with the query.
@@ -159,9 +181,13 @@ def ask_anthropic(question: str) -> tuple[bool, str, int | None]:
             max_tokens=1000,
             temperature=0,
             system=request_arguments["system"],
-            messages=request_arguments["messages"]
+            messages=request_arguments["messages"],
         )
-        return True, response.content[0].text, response.usage.output_tokens  # Return True, the answer, and the number of output tokens
+        return (
+            True,
+            response.content[0].text,
+            response.usage.output_tokens,
+        )  # Return True, the answer, and the number of output tokens
     except Exception as e:
         logger.error(f"Error querying Anthropics for question '{question}': {e}")
         return False, None
@@ -169,11 +195,16 @@ def ask_anthropic(question: str) -> tuple[bool, str, int | None]:
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        prog='claude poet',
-        description='Answer questions as a short poem')
-    parser.add_argument('--disable-streaming-logging', action='store_true', help="Disable streaming logging output.")
+        prog="claude poet", description="Answer questions as a short poem"
+    )
+    parser.add_argument(
+        "--disable-streaming-logging",
+        action="store_true",
+        help="Disable streaming logging output.",
+    )
     args = parser.parse_args()
     return args
+
 
 def main():
     global logger
@@ -216,11 +247,14 @@ def main():
             else:
                 cost_data["total_output_tokens_count"] += output_tokens_count
                 cost_data["output_tokens_sample_count"] += 1
-            cost_data["output_tokens_average"] = cost_data["total_output_tokens_count"] / cost_data["output_tokens_sample_count"]
+            cost_data["output_tokens_average"] = (
+                cost_data["total_output_tokens_count"]
+                / cost_data["output_tokens_sample_count"]
+            )
 
             save_cost_data(cost_data)
         else:
-            print('''I'm sorry, I can't answer your question right now''')
+            print("""I'm sorry, I can't answer your question right now""")
 
 
 if __name__ == "__main__":
