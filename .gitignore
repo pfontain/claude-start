@@ -1,6 +1,9 @@
 # Generated answer data
 answer_question_pair_data.json
 
+# Generated cost data
+cost_data.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
