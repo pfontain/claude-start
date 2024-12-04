@@ -89,14 +89,34 @@ def create_anthropic_request_arguments(question: str) -> dict:
     }
 
 
-# TODO: Validate data
 def load_cost_data() -> dict:
     """Load cost data from a JSON file if it exists."""
     global logger
     if COST_DATA_JSON_PATH.exists():
         try:
             with COST_DATA_JSON_PATH.open("r") as file:
-                return json.load(file)
+                data = json.load(file)
+
+                if "total_output_tokens_count" not in data or not isinstance(
+                    data["total_output_tokens_count"], int
+                ):
+                    logger.error(
+                        f"No valid total_output_tokens_count in '{COST_DATA_JSON_PATH}'"
+                    )
+                elif "output_tokens_sample_count" not in data or not isinstance(
+                    data["output_tokens_sample_count"], int
+                ):
+                    logger.error(
+                        f"No valid output_tokens_sample_count in '{COST_DATA_JSON_PATH}'"
+                    )
+                elif "output_tokens_average" not in data or not isinstance(
+                    data["output_tokens_average"], float
+                ):
+                    logger.error(
+                        f"No valid output_tokens_average in '{COST_DATA_JSON_PATH}'"
+                    )
+                else:
+                    return data
         except (json.JSONDecodeError, OSError) as e:
             logger.error(f"Error loading data from '{COST_DATA_JSON_PATH}': {e}")
             return {}
