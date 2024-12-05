@@ -20,6 +20,13 @@ CLAUDE_3_5_SONNET_PRICE_DOLLARS_INPUT_PER_MILLION_OF_TOKENS = 3
 # Claude 3.5 Sonnet price in dollars for a million output tokens
 CLAUDE_3_5_SONNET_PRICE_DOLLARS_OUTPUT_PER_MILLION_OF_TOKENS = 15
 
+# Define cost data keys and expected types
+COST_DATA_KEYS = {
+    "total_output_tokens_count": int,
+    "output_tokens_sample_count": int,
+    "output_tokens_average": float,
+}
+
 
 def setup_logger(enable_streaming_logging: bool) -> logging.Logger:
     """Configure and return a logger, or None if logging is disabled."""
@@ -89,6 +96,31 @@ def create_anthropic_request_arguments(question: str) -> dict:
     }
 
 
+def validate_data(data: dict, required_keys: dict) -> bool:
+    """
+    Validate that the required keys exist in the data with the correct types.
+
+    Args:
+        data (dict): The data dictionary to validate.
+        required_keys (dict): A dictionary of required keys and their expected types.
+        logger (logging.Logger): Logger for error messages.
+
+    Returns:
+        bool: True if the data is valid, False otherwise.
+    """
+    global logger
+    for key, expected_type in required_keys.items():
+        if key not in data:
+            logger.error(f"Missing key '{key}' in data.")
+            return False
+        if not isinstance(data[key], expected_type):
+            logger.error(
+                f"Invalid type for key '{key}'. Expected {expected_type}, got {type(data[key])}."
+            )
+            return False
+    return True
+
+
 def load_cost_data() -> dict:
     """Load cost data from a JSON file if it exists."""
     global logger
@@ -97,26 +129,13 @@ def load_cost_data() -> dict:
             with COST_DATA_JSON_PATH.open("r") as file:
                 data = json.load(file)
 
-                if "total_output_tokens_count" not in data or not isinstance(
-                    data["total_output_tokens_count"], int
-                ):
-                    logger.error(
-                        f"No valid total_output_tokens_count in '{COST_DATA_JSON_PATH}'"
-                    )
-                elif "output_tokens_sample_count" not in data or not isinstance(
-                    data["output_tokens_sample_count"], int
-                ):
-                    logger.error(
-                        f"No valid output_tokens_sample_count in '{COST_DATA_JSON_PATH}'"
-                    )
-                elif "output_tokens_average" not in data or not isinstance(
-                    data["output_tokens_average"], float
-                ):
-                    logger.error(
-                        f"No valid output_tokens_average in '{COST_DATA_JSON_PATH}'"
-                    )
-                else:
-                    return data
+            if not validate_data(data, COST_DATA_KEYS):
+                logger.error(
+                    f"Cost data validation failed for '{COST_DATA_JSON_PATH}'."
+                )
+                return {}
+
+            return data
         except (json.JSONDecodeError, OSError) as e:
             logger.error(f"Error loading data from '{COST_DATA_JSON_PATH}': {e}")
             return {}
