@@ -20,13 +20,6 @@ CLAUDE_3_5_SONNET_PRICE_DOLLARS_INPUT_PER_MILLION_OF_TOKENS = 3
 # Claude 3.5 Sonnet price in dollars for a million output tokens
 CLAUDE_3_5_SONNET_PRICE_DOLLARS_OUTPUT_PER_MILLION_OF_TOKENS = 15
 
-# Define cost data keys and expected types
-COST_DATA_KEYS = {
-    "total_output_tokens_count": int,
-    "output_tokens_sample_count": int,
-    "output_tokens_average": float,
-}
-
 
 def setup_logger(enable_streaming_logging: bool) -> logging.Logger:
     """Configure and return a logger, or None if logging is disabled."""
@@ -96,62 +89,75 @@ def create_anthropic_request_arguments(question: str) -> dict:
     }
 
 
-def validate_data(data: dict, required_keys: dict) -> bool:
-    """
-    Validate that the required keys exist in the data with the correct types.
+class CostData:
+    """Handles operations related to cost data."""
 
-    Args:
-        data (dict): The data dictionary to validate.
-        required_keys (dict): A dictionary of required keys and their expected types.
-        logger (logging.Logger): Logger for error messages.
+    KEYS = {
+        "total_output_tokens_count": int,
+        "output_tokens_sample_count": int,
+        "output_tokens_average": float,
+    }
 
-    Returns:
-        bool: True if the data is valid, False otherwise.
-    """
-    global logger
-    for key, expected_type in required_keys.items():
-        if key not in data:
-            logger.error(f"Missing key '{key}' in data.")
-            return False
-        if not isinstance(data[key], expected_type):
-            logger.error(
-                f"Invalid type for key '{key}'. Expected {expected_type}, got {type(data[key])}."
-            )
-            return False
-    return True
+    def __init__(self, filepath: Path, logger: logging.Logger):
+        self.filepath = filepath
+        self.logger = logger
+        self.data = self._load()
 
-
-def load_cost_data() -> dict:
-    """Load cost data from a JSON file if it exists."""
-    global logger
-    if COST_DATA_JSON_PATH.exists():
-        try:
-            with COST_DATA_JSON_PATH.open("r") as file:
-                data = json.load(file)
-
-            if not validate_data(data, COST_DATA_KEYS):
-                logger.error(
-                    f"Cost data validation failed for '{COST_DATA_JSON_PATH}'."
+    def _validate(self, data: dict) -> bool:
+        """Validate that the required keys exist with the correct types."""
+        for key, expected_type in self.KEYS.items():
+            if key not in data:
+                self.logger.error(f"Missing key '{key}' in cost data.")
+                return False
+            if not isinstance(data[key], expected_type):
+                self.logger.error(
+                    f"Invalid type for key '{key}'. Expected {expected_type}, got {type(data[key])}."
                 )
-                return {}
-
-            return data
-        except (json.JSONDecodeError, OSError) as e:
-            logger.error(f"Error loading data from '{COST_DATA_JSON_PATH}': {e}")
-            return {}
-    return {}
-
-
-def save_cost_data(cost_data: dict) -> bool:
-    """Save the cost data to the JSON file."""
-    global logger
-    try:
-        with COST_DATA_JSON_PATH.open("w") as file:
-            json.dump(cost_data, file, indent=4)
+                return False
         return True
-    except OSError as e:
-        logger.error(f"Error saving data in file '{COST_DATA_JSON_PATH}': {e}")
-        return False
+
+    def _load(self) -> dict:
+        """Load cost data from a JSON file."""
+        if not self.filepath.exists():
+            self.logger.info(f"Cost data file '{self.filepath}' does not exist.")
+            return {}
+        try:
+            with self.filepath.open("r") as file:
+                data = json.load(file)
+            if self._validate(data):
+                return data
+            else:
+                self.logger.error("Validation failed. Initializing with empty data.")
+                return {}
+        except (json.JSONDecodeError, OSError) as e:
+            self.logger.error(f"Error loading cost data from '{self.filepath}': {e}")
+            return {}
+
+    def save(self) -> bool:
+        """Save cost data to the JSON file."""
+        try:
+            with self.filepath.open("w") as file:
+                json.dump(self.data, file, indent=4)
+            return True
+        except OSError as e:
+            self.logger.error(f"Error saving cost data to '{self.filepath}': {e}")
+            return False
+
+    def update_output_tokens(self, output_tokens_count: int):
+        """Update the output token statistics."""
+        if not self.data:
+            self.data = {
+                "total_output_tokens_count": output_tokens_count,
+                "output_tokens_sample_count": 1,
+                "output_tokens_average": output_tokens_count,
+            }
+        else:
+            self.data["total_output_tokens_count"] += output_tokens_count
+            self.data["output_tokens_sample_count"] += 1
+            self.data["output_tokens_average"] = (
+                self.data["total_output_tokens_count"]
+                / self.data["output_tokens_sample_count"]
+            )
 
 
 def get_anthropic_input_tokens_cost(input_tokens_count: int) -> float:
@@ -251,6 +257,8 @@ def main():
     logger = setup_logger(not args.disable_streaming_logging)
     logger.debug(f"Command line arguments: {args}")
 
+    cost_data_manager = CostData(COST_DATA_JSON_PATH, logger)
+
     while True:
         question = input("Ask your question: ").strip()
 
@@ -266,8 +274,9 @@ def main():
         print(answer_question_pairs[question])
     else:
         logger.info(f"question: {question}")
-        cost_data = load_cost_data()
-        log_anthropic_cost(question, cost_data.get("output_tokens_average", None))
+        log_anthropic_cost(
+            question, cost_data_manager.data.get("output_tokens_average")
+        )
         # Ask the question using Anthropics API
         success, response, output_tokens_count = ask_anthropic(question)
 
@@ -279,19 +288,9 @@ def main():
             else:
                 logger.warning(f"Unable to archive answer to '{question}'")
 
-            logger.debug(cost_data)
-            if not cost_data:
-                cost_data["total_output_tokens_count"] = output_tokens_count
-                cost_data["output_tokens_sample_count"] = 1
-            else:
-                cost_data["total_output_tokens_count"] += output_tokens_count
-                cost_data["output_tokens_sample_count"] += 1
-            cost_data["output_tokens_average"] = (
-                cost_data["total_output_tokens_count"]
-                / cost_data["output_tokens_sample_count"]
-            )
-
-            save_cost_data(cost_data)
+            if output_tokens_count is not None:
+                cost_data_manager.update_output_tokens(output_tokens_count)
+                cost_data_manager.save()
         else:
             print("""I'm sorry, I can't answer your question right now""")
 
