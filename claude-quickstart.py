@@ -73,6 +73,9 @@ def save_answer_question_pair_data(answer_question_pairs: dict) -> bool:
     try:
         with ANSWER_QUESTION_PAIR_DATA_JSON_PATH.open("w") as file:
             json.dump(answer_question_pairs, file, indent=4)
+        logger.info(
+            f"Saved answer question pair data to '{ANSWER_QUESTION_PAIR_DATA_JSON_PATH}'"
+        )
         return True
     except OSError as e:
         logger.error(
@@ -125,6 +128,7 @@ class CostData:
             with self.filepath.open("r") as file:
                 data = json.load(file)
             if self._validate(data):
+                self.logger.debug(f"Cost data loaded from '{self.filepath}'.")
                 return data
             else:
                 self.logger.error("Validation failed. Initializing with empty data.")
@@ -138,6 +142,7 @@ class CostData:
         try:
             with self.filepath.open("w") as file:
                 json.dump(self.data, file, indent=4)
+            self.logger.debug(f"Cost data saved to '{self.filepath}'.")
             return True
         except OSError as e:
             self.logger.error(f"Error saving cost data to '{self.filepath}': {e}")
@@ -158,6 +163,7 @@ class CostData:
                 self.data["total_output_tokens_count"]
                 / self.data["output_tokens_sample_count"]
             )
+        self.logger.debug(f"Cost data updated to {self.data}.")
 
 
 def get_anthropic_input_tokens_cost(input_tokens_count: int) -> float:
@@ -181,12 +187,18 @@ def log_anthropic_cost(question: str, output_tokens_average: float | None):
     client = anthropic.Anthropic()
 
     request_arguments = create_anthropic_request_arguments(question)
-    response = client.beta.messages.count_tokens(
-        betas=["token-counting-2024-11-01"],
-        model=request_arguments["model"],
-        system=request_arguments["system"],
-        messages=request_arguments["messages"],
-    )
+    try:
+        response = client.beta.messages.count_tokens(
+            betas=["token-counting-2024-11-01"],
+            model=request_arguments["model"],
+            system=request_arguments["system"],
+            messages=request_arguments["messages"],
+        )
+    except Exception as e:
+        logger.warning(
+            f"Unable to count tokens for request_arguments '{request_arguments}': {e}"
+        )
+        return
 
     logger.debug(f"input tokens count: {response.input_tokens}")
 
@@ -209,18 +221,19 @@ def log_anthropic_cost(question: str, output_tokens_average: float | None):
     return estimated_total_cost
 
 
-def ask_anthropic(question: str) -> tuple[bool, str, int | None]:
+def ask_anthropic(question: str) -> tuple[bool, str | None, int | None]:
     """
     Ask a question to the Anthropics model and return a tuple (success_flag, response, output_tokens_count).
 
     Returns:
         - (True, answer, output_tokens_count) if the query was successful.
-        - None if there was an issue with the query.
+        - (False, None, None) if there was an issue with the query.
     """
     global logger
     try:
         request_arguments = create_anthropic_request_arguments(question)
         client = anthropic.Anthropic()
+        logger.debug(f"Created Anthropic request with arguments '{request_arguments}'")
         response = client.messages.create(
             model=request_arguments["model"],
             max_tokens=1000,
@@ -228,6 +241,7 @@ def ask_anthropic(question: str) -> tuple[bool, str, int | None]:
             system=request_arguments["system"],
             messages=request_arguments["messages"],
         )
+        logger.info("Anthropic request succeeded")
         return (
             True,
             response.content[0].text,
@@ -235,7 +249,7 @@ def ask_anthropic(question: str) -> tuple[bool, str, int | None]:
         )  # Return True, the answer, and the number of output tokens
     except Exception as e:
         logger.error(f"Error querying Anthropics for question '{question}': {e}")
-        return False, None
+        return (False, None, None)
 
 
 def parse_arguments():
@@ -265,15 +279,19 @@ def main():
         if question:
             break
         print("Hum ... did you mean to write something?")
+        logger.debug("Empty question.")
+    logger.info(f"question: '{question}'")
 
     answer_question_pairs = load_answer_question_pair_data()
 
     # Check if the question is already archived
     if question in answer_question_pairs:
         print("I think I remember ...")
-        print(answer_question_pairs[question])
+        logger.info("Repeated question detected.")
+        answer = answer_question_pairs[question]
+        print(answer)
+        logger.debug(f"Retrieved answer: '{answer}'")
     else:
-        logger.info(f"question: {question}")
         log_anthropic_cost(
             question, cost_data_manager.data.get("output_tokens_average")
         )
